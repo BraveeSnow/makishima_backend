@@ -1,0 +1,7 @@
+# builds
+/target
+
+# runtime/development environment
+/.vscode
+.env
+sqlite.db
