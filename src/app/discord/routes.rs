@@ -1,13 +1,14 @@
 use std::env;
 
 use actix_web::{
-    cookie::Cookie,
+    cookie::{time::OffsetDateTime, Cookie, Expiration, SameSite},
+    error::HttpError,
     get,
     http::StatusCode,
     web::{self, Query},
-    HttpResponse,
+    HttpRequest, HttpResponse, ResponseError,
 };
-use log::error;
+use log::{error, info};
 use sea_orm::{sea_query::OnConflict, EntityTrait, Set};
 
 use crate::{
@@ -16,7 +17,7 @@ use crate::{
         types::{DiscordAuthGrant, DiscordTokenRequest, DiscordTokenResponse},
     },
     entities::user,
-    util::jwt::create_token,
+    util::jwt::{create_token, verify_token},
     AppState, DISCORD_ENDPOINT, HTTP_CLIENT, MAKISHIMA_ID, MAKISHIMA_SECRET,
 };
 
@@ -30,6 +31,22 @@ async fn identify_user(access_token: String) -> Result<DiscordIdentity, reqwest:
         .await;
 
     user_identity?.json::<DiscordIdentity>().await
+}
+
+#[get("/verify")]
+pub async fn discord_verify(req: HttpRequest) -> HttpResponse {
+    let cookie = req
+        .cookie("identity")
+        .unwrap_or(Cookie::new("identity", ""));
+
+    let verified = verify_token(cookie.value().to_string());
+    info!("Verification status: {}", verified);
+
+    HttpResponse::new(if verified {
+        StatusCode::OK
+    } else {
+        DiscordError::Unauthorized.status_code()
+    })
 }
 
 #[get("/redirect/discord")]
@@ -89,8 +106,7 @@ pub async fn discord_oauth(
             Cookie::build("identity", jwt.unwrap())
                 .domain("localhost")
                 .path("/")
-                .http_only(true)
-                .secure(true)
+                .same_site(SameSite::Lax)
                 .finish(),
         )
         .finish())

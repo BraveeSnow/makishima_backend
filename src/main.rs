@@ -4,7 +4,12 @@ mod util;
 
 use std::env;
 
-use actix_web::{get, web::Data, App, HttpResponse, HttpServer};
+use actix_cors::Cors;
+use actix_web::{
+    http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
+    web::Data,
+    App, HttpServer,
+};
 use app::discord::routes::discord_oauth;
 use dotenvy::dotenv;
 use lazy_static::lazy_static;
@@ -12,6 +17,8 @@ use log::{error, info, warn};
 use reqwest::Client;
 use sea_orm::{Database, DatabaseConnection};
 use url::Url;
+
+use crate::app::discord::routes::discord_verify;
 
 lazy_static! {
     static ref HTTP_CLIENT: Client = Client::new();
@@ -32,11 +39,6 @@ lazy_static! {
 #[derive(Clone)]
 struct AppState {
     db: DatabaseConnection,
-}
-
-#[get("/login")]
-async fn login() -> HttpResponse {
-    HttpResponse::Ok().finish()
 }
 
 #[actix_web::main]
@@ -62,7 +64,14 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .service(login)
+            .wrap(
+                Cors::default()
+                    .allowed_origin("http://localhost:5173")
+                    .allowed_methods(vec!["GET", "POST"])
+                    .allowed_headers(vec![ACCEPT, AUTHORIZATION, CONTENT_TYPE])
+                    .supports_credentials(),
+            )
+            .service(discord_verify)
             .service(discord_oauth)
             .app_data(Data::new(state.clone()))
     })

@@ -1,6 +1,8 @@
 use std::time::SystemTime;
 
-use jsonwebtoken::{encode, errors::Error, EncodingKey, Header};
+use jsonwebtoken::{
+    decode, encode, errors::Error, Algorithm, DecodingKey, EncodingKey, Header, Validation,
+};
 use log::debug;
 use serde::{Deserialize, Serialize};
 
@@ -34,4 +36,15 @@ pub fn create_token(identity: DiscordIdentity, expiry_time: u64) -> Result<Strin
         &claims,
         &EncodingKey::from_secret(MAKISHIMA_SIGKEY.as_ref()),
     )
+}
+
+pub fn verify_token(jwt: String) -> bool {
+    debug!("Verifying JWT token {}", jwt);
+
+    decode::<Claims>(
+        jwt.as_str(),
+        &DecodingKey::from_secret(MAKISHIMA_SIGKEY.as_ref()),
+        &Validation::new(Algorithm::HS256),
+    )
+    .is_ok()
 }

@@ -3,6 +3,8 @@ use derive_more::{Display, Error};
 
 #[derive(Debug, Display, Error)]
 pub enum DiscordError {
+    #[display(fmt = "unauthorized")]
+    Unauthorized,
     #[display(fmt = "internal server error")]
     InternalError,
 }
@@ -14,6 +16,7 @@ impl ResponseError for DiscordError {
 
     fn status_code(&self) -> actix_web::http::StatusCode {
         match self {
+            DiscordError::Unauthorized => StatusCode::UNAUTHORIZED,
             DiscordError::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
