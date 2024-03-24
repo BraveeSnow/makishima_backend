@@ -1,23 +1,11 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+
+use crate::util::oauth::OAuthTokenResponse;
 
 #[derive(Deserialize)]
-pub struct DiscordAuthGrant {
-    pub code: String,
-}
-
-#[derive(Serialize)]
-pub struct DiscordTokenRequest {
-    pub code: String,
-    pub grant_type: String,
-    pub redirect_uri: String,
-}
-
-#[derive(Deserialize)]
-pub struct DiscordTokenResponse {
-    pub access_token: String,
-    pub token_type: String,
-    pub expires_in: u64,
-    pub refresh_token: String,
+pub struct DiscordOAuthTokenResponse {
+    #[serde(flatten)]
+    pub oauth_response: OAuthTokenResponse,
     pub scope: String,
 }
 

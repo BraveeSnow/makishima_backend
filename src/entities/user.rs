@@ -7,13 +7,28 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(column_name = "Id", primary_key, auto_increment = false)]
     pub id: String,
-    #[sea_orm(column_name = "DiscordToken")]
+    #[sea_orm(column_name = "DiscordToken", unique)]
     pub discord_token: String,
-    #[sea_orm(column_name = "AnilistToken")]
-    pub anilist_token: Option<String>,
+    #[sea_orm(column_name = "AnilistId", unique)]
+    pub anilist_id: Option<u32>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::anilist::Entity",
+        from = "Column::AnilistId",
+        to = "super::anilist::Column::Id",
+        on_update = "NoAction",
+        on_delete = "NoAction"
+    )]
+    Anilist,
+}
+
+impl Related<super::anilist::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Anilist.def()
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}

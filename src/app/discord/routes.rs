@@ -1,24 +1,20 @@
-use std::env;
-
 use actix_web::{
-    cookie::{time::OffsetDateTime, Cookie, Expiration, SameSite},
-    error::HttpError,
+    cookie::{time::OffsetDateTime, Cookie, SameSite},
     get,
-    http::StatusCode,
-    web::{self, Query},
-    HttpRequest, HttpResponse, ResponseError,
+    http::{header, StatusCode},
+    web, HttpRequest, HttpResponse, ResponseError,
 };
-use log::{error, info};
+use log::{error, info, warn};
 use sea_orm::{sea_query::OnConflict, EntityTrait, Set};
 
 use crate::{
-    app::discord::{
-        error::DiscordError,
-        types::{DiscordAuthGrant, DiscordTokenRequest, DiscordTokenResponse},
+    app::discord::{error::DiscordError, types::DiscordOAuthTokenResponse},
+    entities::{prelude::User, user},
+    util::{
+        jwt::{create_token, verify_token},
+        oauth::{OAuthGrant, OAuthTokenRequest, OAuthTokenRevokeRequest},
     },
-    entities::user,
-    util::jwt::{create_token, verify_token},
-    AppState, DISCORD_ENDPOINT, HTTP_CLIENT, MAKISHIMA_ID, MAKISHIMA_SECRET,
+    AppState, DISCORD_ENDPOINT, HTTP_CLIENT, MAKISHIMA_ID, MAKISHIMA_REDIRECT, MAKISHIMA_SECRET,
 };
 
 use super::types::DiscordIdentity;
@@ -49,15 +45,45 @@ pub async fn discord_verify(req: HttpRequest) -> HttpResponse {
     })
 }
 
+#[get("/logout")]
+pub async fn discord_logout(req: HttpRequest) -> HttpResponse {
+    if let Some(identity) = req.cookie("identity") {
+        let response = HTTP_CLIENT
+            .post(format!(
+                "{}/api/v10/oauth2/token/revoke",
+                DISCORD_ENDPOINT.to_string()
+            ))
+            .form(&OAuthTokenRevokeRequest {
+                token: identity.value().to_string(),
+                token_type_hint: String::from("access_token"),
+            })
+            .send()
+            .await;
+
+        if let Err(err) = response {
+            warn!("Token revocation request encountered a problem: {}", err);
+        }
+    }
+
+    HttpResponse::build(StatusCode::TEMPORARY_REDIRECT)
+        .append_header((header::LOCATION, "http://localhost:5173/"))
+        .cookie(
+            Cookie::build("identity", "")
+                .expires(OffsetDateTime::now_utc())
+                .finish(),
+        )
+        .finish()
+}
+
 #[get("/redirect/discord")]
 pub async fn discord_oauth(
-    auth: Query<DiscordAuthGrant>,
+    auth: web::Query<OAuthGrant>,
     data: web::Data<AppState>,
 ) -> Result<HttpResponse, DiscordError> {
-    let token_exchange = DiscordTokenRequest {
+    let token_exchange = OAuthTokenRequest {
         code: auth.code.clone(),
         grant_type: String::from("authorization_code"),
-        redirect_uri: env::var("MAKISHIMA_REDIRECT").unwrap(),
+        redirect_uri: MAKISHIMA_REDIRECT.to_string(),
     };
 
     let token_response = HTTP_CLIENT
@@ -74,20 +100,22 @@ pub async fn discord_oauth(
 
     let tokens = token_response
         .unwrap()
-        .json::<DiscordTokenResponse>()
+        .json::<DiscordOAuthTokenResponse>()
         .await
         .unwrap();
 
-    let identity = identify_user(tokens.access_token.to_owned()).await.unwrap();
-    let jwt = create_token(identity.to_owned(), tokens.expires_in);
+    let identity = identify_user(tokens.oauth_response.access_token.to_owned())
+        .await
+        .unwrap();
+    let jwt = create_token(identity.to_owned(), tokens.oauth_response.expires_in);
 
     let user_entry = user::ActiveModel {
         id: Set(identity.id.to_owned()),
-        discord_token: Set(tokens.access_token.to_owned()),
-        anilist_token: Set(None),
+        discord_token: Set(tokens.oauth_response.access_token.to_owned()),
+        anilist_id: Set(None),
     };
 
-    if let Err(err) = user::Entity::insert(user_entry)
+    if let Err(err) = User::insert(user_entry)
         .on_conflict(
             OnConflict::column(user::Column::Id)
                 .update_column(user::Column::DiscordToken)

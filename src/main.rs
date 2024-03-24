@@ -18,7 +18,10 @@ use reqwest::Client;
 use sea_orm::{Database, DatabaseConnection};
 use url::Url;
 
-use crate::app::discord::routes::discord_verify;
+use crate::app::{
+    anilist::routes::anilist_redirect,
+    discord::routes::{discord_logout, discord_verify},
+};
 
 lazy_static! {
     static ref HTTP_CLIENT: Client = Client::new();
@@ -29,11 +32,18 @@ lazy_static! {
     static ref MAKISHIMA_REDIRECT: String = env::var("MAKISHIMA_REDIRECT").expect("MAKISHIMA_REDIRECT is not set");
     static ref MAKISHIMA_SIGKEY: String = env::var("MAKISHIMA_SIGKEY").expect("MAKISHIMA_SIGKEY is not set");
 
+    // anilist oauth
+    static ref ANILIST_ID: String = env::var("ANILIST_ID").expect("ANILIST_ID is not set");
+    static ref ANILIST_SECRET: String = env::var("ANILIST_SECRET").expect("ANILIST_SECRET is not set");
+    static ref ANILIST_REDIRECT: String = env::var("ANILIST_REDIRECT").expect("ANILIST_REDIRECT is not set");
+
     // database
     static ref DB_URI: String = env::var("DB_URI").expect("DB_URI is not set");
 
     // endpoints
     static ref DISCORD_ENDPOINT: Url = Url::parse("https://discord.com/").unwrap();
+    static ref ANILIST_ENDPOINT: Url = Url::parse("https://anilist.co/").unwrap();
+    static ref ANILIST_GRAPHQL_ENDPOINT: Url = Url::parse("https://graphql.anilist.co/").unwrap();
 }
 
 #[derive(Clone)]
@@ -71,8 +81,13 @@ async fn main() -> std::io::Result<()> {
                     .allowed_headers(vec![ACCEPT, AUTHORIZATION, CONTENT_TYPE])
                     .supports_credentials(),
             )
+            // discord services
             .service(discord_verify)
+            .service(discord_logout)
             .service(discord_oauth)
+            // anilist services
+            .service(anilist_redirect)
+            // shared application state
             .app_data(Data::new(state.clone()))
     })
     .bind(("127.0.0.1", 3000))?
