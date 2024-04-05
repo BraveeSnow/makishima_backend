@@ -1,0 +1,11 @@
+# build artifacts
+target/
+
+# development files
+.git/
+.gitignore
+Dockerfile
+
+# unneeded
+LICENSE
+README.md
