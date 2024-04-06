@@ -90,7 +90,7 @@ async fn main() -> std::io::Result<()> {
             // shared application state
             .app_data(Data::new(state.clone()))
     })
-    .bind(("127.0.0.1", 3000))?
+    .bind(("0.0.0.0", 3000))?
     .run()
     .await
 }
